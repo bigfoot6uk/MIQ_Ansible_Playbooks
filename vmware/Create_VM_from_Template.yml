@@ -1,10 +1,12 @@
 ---
+# Updated to use newer modules  
+
 - hosts: all
   gather_facts: false
   connection: local
 
   vars:
-    provider_id: "21000000000002"
+    provider_id: "6000000000001"
     max_retries: 9
     retry_interval: 20
 
@@ -27,29 +29,36 @@
 
     - debug: var=svc_url 
 
-    - name: Create Virtual Machines
-      vsphere_guest:
-        validate_certs: no
-        vcenter_hostname: "{{ vcenter_hostname }}"
-        guest: "{{ inventory_hostname }}"
-        power_on_after_clone: no
-        from_template: yes
-        template_src: "{{ template }}"
-        esxi:
-          datacenter: "{{ datacenter }}"
-          hostname: "{{ esxi_host }}"
+    - name: Clone the template
+      vmware_guest:
+        hostname: "{{ vcenter-name}}"
+        username: "{{ username }}"
+        password: "{{ password }}"
+        validate_certs: False
+        name: "{{ vm_name }}"
+        template: "{{ template }}"
+        datacenter: "{{ dc }}"
+        folder: /IT Services
+        state: poweredon
+        cluster: {{ cluster }}
+        wait_for_ip_address: yes
+        customization_spec: {{ custom_spec }}
+      register: vm_info
 
     - name: Gather the facts for the VM
-      vsphere_guest:
-        validate_certs: no
-        vcenter_hostname: "{{ vcenter_hostname }}"
-        guest: "{{ inventory_hostname }}"
-        vmware_guest_facts: yes
+      vmware_guest_facts:
+        hostname: "{{ vcenter_hostname }}"
+        username: "{{ username }}"
+        password: "{{ password }}"
+        name: "{{ vm_name}}"
+        datacenter: {{ dc }}
+        validate_certs: false
       register: new_vm
 
     - debug: var=new_vm    
 
-    - set_fact: new_vm_uuid="{{ new_vm.ansible_facts.hw_product_uuid }}"
+    - set_fact:
+        new_vm_uuid: "{{ new_vm.instance.hw_product_uuid }}"
 
     - debug: var=new_vm_uuid
 
@@ -88,7 +97,8 @@
       delay: "{{retry_interval}}"
     - debug: var=task_result
     
-    - set_fact: find_vm_url="{{ manageiq.api_url }}/api/vms?expand=resources&attributes=href,uid_ems&filter[]=uid_ems='{{ new_vm_uuid }}'"
+    - set_fact: 
+        find_vm_url: "{{ manageiq.api_url }}/api/vms?expand=resources&attributes=href,uid_ems&filter[]=uid_ems='{{ new_vm_uuid }}'"
 
     - debug: var=find_vm_url
 
@@ -134,3 +144,4 @@
       register: output
 
     - debug: var=output.json.results[0].success
+
